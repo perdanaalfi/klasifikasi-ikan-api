@@ -6,14 +6,16 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)
 
-# Muat model
-model = joblib.load("model_ikan_rf.pkl")
+try:
+    model = joblib.load("model_ikan_rf.pkl")
+except:
+    model = None  # agar server tetap jalan meskipun belum ada model
 
-# Variabel global untuk menyimpan data terbaru
+# Data terbaru dari sensor
 last_data = {
-    "suhu": 0,
-    "do": 0,
-    "ph": 0,
+    "suhu": 0.0,
+    "do": 0.0,
+    "ph": 0.0,
     "prediksi": "-",
     "waktu": None
 }
@@ -28,10 +30,16 @@ def last_prediction():
 
 @app.route("/update/<suhu>/<do>/<ph>")
 def update_data(suhu, do, ph):
-    suhu = float(suhu)
-    do = float(do)
-    ph = float(ph)
-    pred = model.predict([[do, suhu, ph]])[0]
+    try:
+        suhu = float(suhu)
+        do = float(do)
+        ph = float(ph)
+    except ValueError:
+        return jsonify({"status": "error", "message": "Format angka tidak valid"}), 400
+
+    pred = "-"
+    if model:
+        pred = model.predict([[do, suhu, ph]])[0]
 
     last_data.update({
         "suhu": suhu,
