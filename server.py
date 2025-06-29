@@ -20,9 +20,9 @@ sensor_history = deque(maxlen=12)
 
 # Data terakhir
 last_data = {
-    "suhu": 20,
-    "do": 5,
-    "ph": 7,
+    "suhu": 0,
+    "do": 0,
+    "ph": 0,
     "waktu": None
 }
 
