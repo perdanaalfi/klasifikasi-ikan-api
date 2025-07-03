@@ -23,7 +23,8 @@ last_data = {
     "suhu": 0,
     "do": 0,
     "ph": 0,
-    "waktu": None
+    "waktu": None,
+    "prediksi": []
 }
 
 # Aturan standar (rule-based) SNI
@@ -34,6 +35,32 @@ rules = {
     "patin":  {"suhu": [24, 30], "do": [3, 7], "ph": [6, 8.5]},
     "gurame": {"suhu": [24, 30], "do": [3, 7], "ph": [6, 8.5]}
 }
+
+def classify_fish(suhu, do, ph):
+    """Fungsi untuk mengklasifikasi ikan berdasarkan parameter"""
+    hasil = []
+    
+    # Prediksi dari model (jika tersedia)
+    if model:
+        try:
+            pred = model.predict([[do, suhu, ph]])[0]
+            hasil.append(pred)
+            print(f"🤖 Prediksi model: {pred}")
+        except Exception as e:
+            print("❌ Gagal prediksi dari model:", e)
+    
+    # Tambahan dari rule-based
+    for ikan, batas in rules.items():
+        skor = 0
+        if batas["suhu"][0] <= suhu <= batas["suhu"][1]: skor += 1
+        if batas["do"][0] <= do <= batas["do"][1]: skor += 1
+        if batas["ph"][0] <= ph <= batas["ph"][1]: skor += 1
+        
+        if skor >= 2 and ikan not in hasil:
+            hasil.append(ikan)
+            print(f"📋 Rule-based: {ikan} (skor: {skor}/3)")
+    
+    return hasil
 
 @app.route("/")
 def home():
@@ -48,6 +75,7 @@ def update_data(suhu, do, ph):
     except:
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
 
+    # Tambahkan ke history
     sensor_history.append({
         "suhu": suhu,
         "do": do,
@@ -55,21 +83,31 @@ def update_data(suhu, do, ph):
         "waktu": datetime.now()
     })
 
+    # Klasifikasi ikan berdasarkan data terbaru
+    prediksi = classify_fish(suhu, do, ph)
+    
+    # Update data terakhir dengan prediksi
     last_data.update({
         "suhu": suhu,
         "do": do,
         "ph": ph,
-        "waktu": datetime.now().isoformat()
+        "waktu": datetime.now().isoformat(),
+        "prediksi": prediksi
     })
 
-    return jsonify({"status": "ok"})
+    print(f"📊 Data terbaru: Suhu={suhu}°C, DO={do}mg/L, pH={ph}")
+    print(f"🐟 Prediksi: {prediksi}")
+
+    return jsonify({"status": "ok", "prediksi": prediksi})
 
 @app.route("/last-prediction")
 def last_prediction():
+    """Endpoint yang dipanggil website untuk mendapatkan data terbaru beserta prediksi"""
     return jsonify(last_data)
 
 @app.route("/classify")
 def classify():
+    """Endpoint untuk klasifikasi berdasarkan rata-rata data history"""
     if not sensor_history:
         return jsonify({"prediksi": [], "message": "Belum ada data sensor"})
 
@@ -78,25 +116,8 @@ def classify():
     avg_do = sum(d["do"] for d in sensor_history) / len(sensor_history)
     avg_ph = sum(d["ph"] for d in sensor_history) / len(sensor_history)
 
-    hasil = []
-
-    # Prediksi dari model (jika tersedia)
-    if model:
-        try:
-            pred = model.predict([[avg_do, avg_suhu, avg_ph]])[0]
-            hasil.append(pred)
-        except Exception as e:
-            print("❌ Gagal prediksi dari model:", e)
-
-    # Tambahan dari rule-based
-    for ikan, batas in rules.items():
-        skor = 0
-        if batas["suhu"][0] <= avg_suhu <= batas["suhu"][1]: skor += 1
-        if batas["do"][0] <= avg_do <= batas["do"][1]: skor += 1
-        if batas["ph"][0] <= avg_ph <= batas["ph"][1]: skor += 1
-
-        if skor >= 2 and ikan not in hasil:
-            hasil.append(ikan)
+    # Klasifikasi berdasarkan rata-rata
+    hasil = classify_fish(avg_suhu, avg_do, avg_ph)
 
     return jsonify({
         "rata_rata": {
@@ -107,6 +128,42 @@ def classify():
         "prediksi": hasil,
         "jumlah_data": len(sensor_history)
     })
+
+# Endpoint khusus untuk update hanya 2 parameter (suhu dan pH)
+@app.route("/update-simple/<suhu>/<ph>")
+def update_simple(suhu, ph):
+    """Endpoint untuk update hanya suhu dan pH, DO diset default 5"""
+    try:
+        suhu = float(suhu)
+        ph = float(ph)
+        do = 5.0  # Default DO value
+    except:
+        return jsonify({"status": "error", "message": "Data tidak valid"}), 400
+
+    # Tambahkan ke history
+    sensor_history.append({
+        "suhu": suhu,
+        "do": do,
+        "ph": ph,
+        "waktu": datetime.now()
+    })
+
+    # Klasifikasi ikan berdasarkan data terbaru
+    prediksi = classify_fish(suhu, do, ph)
+    
+    # Update data terakhir dengan prediksi
+    last_data.update({
+        "suhu": suhu,
+        "do": do,
+        "ph": ph,
+        "waktu": datetime.now().isoformat(),
+        "prediksi": prediksi
+    })
+
+    print(f"📊 Data sederhana: Suhu={suhu}°C, DO={do}mg/L (default), pH={ph}")
+    print(f"🐟 Prediksi: {prediksi}")
+
+    return jsonify({"status": "ok", "prediksi": prediksi})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
