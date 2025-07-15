@@ -42,13 +42,15 @@ def classify_fish(suhu, do, ph):
     hasil_rule = []
 
     # Prediksi dari model
-    if model:
+    if model and (0 <= suhu <= 40) and (0 <= do <= 20) and (3 <= ph <= 10):
         try:
             pred = model.predict([[do, suhu, ph]])[0]
             hasil_model.append(pred.strip().lower())  # uniform lowercase
             print(f"🤖 Prediksi model: {pred}")
         except Exception as e:
             print("❌ Model error:", e)
+    else:
+    print("⚠️ Input tidak wajar, skip prediksi model")
 
     # Rule-based
     for ikan, batas in rules.items():
