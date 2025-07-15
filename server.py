@@ -50,7 +50,7 @@ def classify_fish(suhu, do, ph):
         except Exception as e:
             print("❌ Model error:", e)
     else:
-    print("⚠️ Input tidak wajar, skip prediksi model")
+    print("Input tidak wajar")
 
     # Rule-based
     for ikan, batas in rules.items():
