@@ -37,30 +37,33 @@ rules = {
 }
 
 def classify_fish(suhu, do, ph):
-    """Fungsi untuk mengklasifikasi ikan berdasarkan parameter"""
-    hasil = []
-    
-    # Prediksi dari model (jika tersedia)
+    """Klasifikasi ikan berdasarkan input dan rule + model"""
+    hasil_model = []
+    hasil_rule = []
+
+    # Prediksi dari model
     if model:
         try:
             pred = model.predict([[do, suhu, ph]])[0]
-            hasil.append(pred)
+            hasil_model.append(pred.strip().lower())  # uniform lowercase
             print(f"🤖 Prediksi model: {pred}")
         except Exception as e:
-            print("❌ Gagal prediksi dari model:", e)
-    
-    # Tambahan dari rule-based
+            print("❌ Model error:", e)
+
+    # Rule-based
     for ikan, batas in rules.items():
         skor = 0
         if batas["suhu"][0] <= suhu <= batas["suhu"][1]: skor += 1
         if batas["do"][0] <= do <= batas["do"][1]: skor += 1
         if batas["ph"][0] <= ph <= batas["ph"][1]: skor += 1
-        
-        if skor >= 2 and ikan not in hasil:
-            hasil.append(ikan)
-            print(f"📋 Rule-based: {ikan} (skor: {skor}/3)")
-    
-    return hasil
+        if skor >= 2:
+            hasil_rule.append(ikan.strip().lower())  # uniform lowercase
+            print(f"📋 Rule cocok: {ikan} ({skor}/3)")
+
+    # Gabungkan, hapus duplikat, kapitalisasi awal
+    gabung = list(set(hasil_model + hasil_rule))
+    return [i.capitalize() for i in gabung]
+
 
 @app.route("/")
 def home():
