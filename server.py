@@ -3,9 +3,26 @@ from flask_cors import CORS
 import joblib
 from datetime import datetime
 from collections import deque
+import firebase_admin
+from firebase_admin import credentials, db
+import os
+import json
 
 app = Flask(__name__)
 CORS(app)
+
+# Inisialisasi Firebase jika belum aktif
+if not firebase_admin._apps:
+    firebase_json = os.environ.get("FIREBASE_CONFIG")
+    if firebase_json:
+        cred_dict = json.loads(firebase_json)
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred, {
+            "databaseURL": "https://klasifikasi-ikan-default-rtdb.asia-southeast1.firebasedatabase.app"
+        })
+        print("✅ Firebase berhasil diinisialisasi")
+    else:
+        print("⚠️ FIREBASE_CONFIG tidak ditemukan di environment variables")
 
 # Load model Random Forest
 try:
@@ -35,6 +52,31 @@ rules = {
     "patin":  {"suhu": [24, 30], "do": [3, 7], "ph": [6, 8.5]},
     "gurame": {"suhu": [24, 30], "do": [3, 7], "ph": [6, 8.5]}
 }
+
+def save_to_firebase(data):
+    """Simpan data ke Firebase Realtime Database"""
+    try:
+        if firebase_admin._apps:
+            ref = db.reference('data_sensor')
+            ref.push(data)
+            print("✅ Data berhasil disimpan ke Firebase")
+        else:
+            print("⚠️ Firebase belum diinisialisasi")
+    except Exception as e:
+        print(f"❌ Error saat menyimpan ke Firebase: {e}")
+
+def get_latest_from_firebase():
+    """Ambil data terbaru dari Firebase"""
+    try:
+        if firebase_admin._apps:
+            ref = db.reference('data_sensor')
+            latest = ref.order_by_key().limit_to_last(1).get()
+            if latest:
+                return list(latest.values())[0]
+        return None
+    except Exception as e:
+        print(f"❌ Error saat membaca dari Firebase: {e}")
+        return None
 
 def classify_fish(suhu, do, ph):
     """Klasifikasi ikan berdasarkan input dan rule + model"""
@@ -69,7 +111,7 @@ def classify_fish(suhu, do, ph):
 
 @app.route("/")
 def home():
-    return "✅ Server Klasifikasi Ikan Aktif (Model + Rule-Based)"
+    return "✅ Server Klasifikasi Ikan Aktif (Model + Rule-Based + Firebase)"
 
 @app.route("/update/<suhu>/<do>/<ph>")
 def update_data(suhu, do, ph):
@@ -81,12 +123,13 @@ def update_data(suhu, do, ph):
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
 
     # Tambahkan ke history
-    sensor_history.append({
+    sensor_data = {
         "suhu": suhu,
         "do": do,
         "ph": ph,
         "waktu": datetime.now()
-    })
+    }
+    sensor_history.append(sensor_data)
 
     # Klasifikasi ikan berdasarkan data terbaru
     prediksi = classify_fish(suhu, do, ph)
@@ -99,6 +142,19 @@ def update_data(suhu, do, ph):
         "waktu": datetime.now().isoformat(),
         "prediksi": prediksi
     })
+
+    # Simpan ke Firebase
+    try:
+        ref = db.reference('data_sensor')
+        ref.push({
+            "suhu": suhu,
+            "do": do,
+            "ph": ph,
+            "prediksi": prediksi,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as firebase_error:
+        print("⚠️ Gagal menyimpan ke Firebase:", firebase_error)
 
     print(f"📊 Data terbaru: Suhu={suhu}°C, DO={do}mg/L, pH={ph}")
     print(f"🐟 Prediksi: {prediksi}")
@@ -146,12 +202,13 @@ def update_simple(suhu, ph):
         return jsonify({"status": "error", "message": "Data tidak valid"}), 400
 
     # Tambahkan ke history
-    sensor_history.append({
+    sensor_data = {
         "suhu": suhu,
         "do": do,
         "ph": ph,
         "waktu": datetime.now()
-    })
+    }
+    sensor_history.append(sensor_data)
 
     # Klasifikasi ikan berdasarkan data terbaru
     prediksi = classify_fish(suhu, do, ph)
@@ -165,10 +222,39 @@ def update_simple(suhu, ph):
         "prediksi": prediksi
     })
 
+    # Simpan ke Firebase
+    try:
+        ref = db.reference('data_sensor')
+        ref.push({
+            "suhu": suhu,
+            "do": do,
+            "ph": ph,
+            "prediksi": prediksi,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as firebase_error:
+        print("⚠️ Gagal menyimpan ke Firebase:", firebase_error)
+
     print(f"📊 Data sederhana: Suhu={suhu}°C, DO={do}mg/L (default), pH={ph}")
     print(f"🐟 Prediksi: {prediksi}")
 
     return jsonify({"status": "ok", "prediksi": prediksi})
+
+@app.route("/firebase-data")
+def get_firebase_data():
+    """Endpoint untuk mengambil data dari Firebase"""
+    try:
+        if firebase_admin._apps:
+            ref = db.reference('data_sensor')
+            data = ref.order_by_key().limit_to_last(10).get()
+            if data:
+                return jsonify({"status": "ok", "data": data})
+            else:
+                return jsonify({"status": "ok", "data": {}, "message": "Tidak ada data"})
+        else:
+            return jsonify({"status": "error", "message": "Firebase belum diinisialisasi"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
