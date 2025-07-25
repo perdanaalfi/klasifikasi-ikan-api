@@ -46,11 +46,11 @@ last_data = {
 
 # Aturan standar (rule-based) SNI
 rules = {
-    "lele":   {"suhu": [22, 33], "do": [2, 6], "ph": [6, 9]},
-    "mas":    {"suhu": [20, 30], "do": [3, 8], "ph": [6.5, 9]},
-    "nila":   {"suhu": [20, 33], "do": [3, 8], "ph": [6, 9]},
-    "patin":  {"suhu": [24, 30], "do": [3, 7], "ph": [6, 8.5]},
-    "gurame": {"suhu": [24, 30], "do": [3, 7], "ph": [6, 8.5]}
+    "lele":   {"suhu": [26, 32], "do": [3, 7], "ph": [6.5, 8]},
+    "mas":    {"suhu": [20, 30], "do": [3, 7], "ph": [6.5, 8]},
+    "nila":   {"suhu": [25, 30], "do": [3, 8], "ph": [6, 8.5]},
+    "patin":  {"suhu": [26, 30], "do": [3, 7], "ph": [6.5, 8]},
+    "gurame": {"suhu": [25, 28], "do": [5, 7], "ph": [6.5, 8]}
 }
 
 def save_to_firebase(data):
@@ -81,10 +81,10 @@ def get_latest_from_firebase():
 def classify_fish(suhu, do, ph):
     """Klasifikasi ikan berdasarkan input dan rule + model"""
     hasil_model = []
-    hasil_rule = []
+    hasil_rule_dengan_skor = []
 
     # Prediksi dari model
-    if model and (0 <= suhu <= 40) and (0 <= do <= 20) and (3 <= ph <= 10):
+    if model and (0 <= suhu <= 33) and (0 <= do <= 9) and (5 <= ph <= 9):
         try:
             pred = model.predict([[do, suhu, ph]])[0]
             hasil_model.append(pred.strip().lower())  # uniform lowercase
@@ -94,19 +94,42 @@ def classify_fish(suhu, do, ph):
     else:
         print("Input tidak wajar")
 
-    # Rule-based
+    # Rule-based dengan skor
     for ikan, batas in rules.items():
         skor = 0
         if batas["suhu"][0] <= suhu <= batas["suhu"][1]: skor += 1
         if batas["do"][0] <= do <= batas["do"][1]: skor += 1
         if batas["ph"][0] <= ph <= batas["ph"][1]: skor += 1
         if skor >= 2:
-            hasil_rule.append(ikan.strip().lower())  # uniform lowercase
+            hasil_rule_dengan_skor.append({
+                "nama": ikan.strip().lower(),
+                "skor": skor
+            })
             print(f"📋 Rule cocok: {ikan} ({skor}/3)")
 
-    # Gabungkan, hapus duplikat, kapitalisasi awal
-    gabung = list(set(hasil_model + hasil_rule))
-    return [i.capitalize() for i in gabung]
+    # Urutkan berdasarkan skor tertinggi dulu
+    hasil_rule_dengan_skor.sort(key=lambda x: x["skor"], reverse=True)
+    
+    # Gabungkan hasil model dengan rule (prioritas model dulu, lalu rule berdasarkan skor)
+    hasil_final = []
+    
+    # Tambahkan hasil model dulu
+    for model_fish in hasil_model:
+        if model_fish not in [fish["nama"] for fish in hasil_rule_dengan_skor]:
+            hasil_final.append(f"{model_fish.capitalize()} (Model)")
+    
+    # Tambahkan hasil rule berdasarkan skor
+    for rule_fish in hasil_rule_dengan_skor:
+        nama = rule_fish["nama"].capitalize()
+        skor = rule_fish["skor"]
+        
+        # Cek apakah juga ada di hasil model
+        if rule_fish["nama"] in hasil_model:
+            hasil_final.append(f"{nama} (Model + Rule {skor}/3)")
+        else:
+            hasil_final.append(f"{nama} (Rule {skor}/3)")
+    
+    return hasil_final
 
 
 @app.route("/")
@@ -139,7 +162,7 @@ def update_data(suhu, do, ph):
         "suhu": suhu,
         "do": do,
         "ph": ph,
-        "waktu": datetime.now().isoformat(),
+        "waktu": datetime.now().strftime("%Y-%m-%d"),
         "prediksi": prediksi
     })
 
@@ -151,7 +174,7 @@ def update_data(suhu, do, ph):
             "do": do,
             "ph": ph,
             "prediksi": prediksi,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().strftime("%Y-%m-%d")
         })
     except Exception as firebase_error:
         print("⚠️ Gagal menyimpan ke Firebase:", firebase_error)
@@ -190,55 +213,7 @@ def classify():
         "jumlah_data": len(sensor_history)
     })
 
-# Endpoint khusus untuk update hanya 2 parameter (suhu dan pH)
-@app.route("/update-simple/<suhu>/<ph>")
-def update_simple(suhu, ph):
-    """Endpoint untuk update hanya suhu dan pH, DO diset default 5"""
-    try:
-        suhu = float(suhu)
-        ph = float(ph)
-        do = 5.0  # Default DO value
-    except:
-        return jsonify({"status": "error", "message": "Data tidak valid"}), 400
 
-    # Tambahkan ke history
-    sensor_data = {
-        "suhu": suhu,
-        "do": do,
-        "ph": ph,
-        "waktu": datetime.now()
-    }
-    sensor_history.append(sensor_data)
-
-    # Klasifikasi ikan berdasarkan data terbaru
-    prediksi = classify_fish(suhu, do, ph)
-    
-    # Update data terakhir dengan prediksi
-    last_data.update({
-        "suhu": suhu,
-        "do": do,
-        "ph": ph,
-        "waktu": datetime.now().isoformat(),
-        "prediksi": prediksi
-    })
-
-    # Simpan ke Firebase
-    try:
-        ref = db.reference('data_sensor')
-        ref.push({
-            "suhu": suhu,
-            "do": do,
-            "ph": ph,
-            "prediksi": prediksi,
-            "timestamp": datetime.now().isoformat()
-        })
-    except Exception as firebase_error:
-        print("⚠️ Gagal menyimpan ke Firebase:", firebase_error)
-
-    print(f"📊 Data sederhana: Suhu={suhu}°C, DO={do}mg/L (default), pH={ph}")
-    print(f"🐟 Prediksi: {prediksi}")
-
-    return jsonify({"status": "ok", "prediksi": prediksi})
 
 @app.route("/firebase-data")
 def get_firebase_data():
