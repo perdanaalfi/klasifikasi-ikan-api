@@ -46,13 +46,12 @@ last_data = {
 
 # Aturan standar (rule-based) SNI
 rules = {
-    "lele":   {"suhu": [22, 33], "do": [2, 6], "ph": [6, 9]},
-    "mas":    {"suhu": [20, 30], "do": [3, 8], "ph": [6.5, 9]},
-    "nila":   {"suhu": [20, 33], "do": [3, 8], "ph": [6, 9]},
-    "patin":  {"suhu": [24, 30], "do": [3, 7], "ph": [6, 8.5]},
-    "gurame": {"suhu": [24, 30], "do": [3, 7], "ph": [6, 8.5]}
+    "lele":   {"suhu": [26, 32], "do": [3, 7], "ph": [6.5, 8]},
+    "mas":    {"suhu": [20, 30], "do": [3, 7], "ph": [6.5, 8]},
+    "nila":   {"suhu": [25, 30], "do": [3, 8], "ph": [6, 8.5]},
+    "patin":  {"suhu": [26, 30], "do": [3, 7], "ph": [6.5, 8]},
+    "gurame": {"suhu": [25, 28], "do": [5, 7], "ph": [6.5, 8]}
 }
-
 def save_to_firebase(data):
     """Simpan data ke Firebase Realtime Database"""
     try:
@@ -84,7 +83,7 @@ def classify_fish(suhu, do, ph):
     hasil_rule_dengan_skor = []
 
     # Prediksi dari model
-    if model and (0 <= suhu <= 40) and (0 <= do <= 20) and (3 <= ph <= 10):
+    if model and (0 <= suhu <= 33) and (0 <= do <= 9) and (5 <= ph <= 9):
         try:
             pred = model.predict([[do, suhu, ph]])[0]
             hasil_model.append(pred.strip().lower())  # uniform lowercase
