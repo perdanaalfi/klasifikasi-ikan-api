@@ -52,6 +52,7 @@ rules = {
     "patin":  {"suhu": [26, 30], "do": [3, 7], "ph": [6.5, 8]},
     "gurame": {"suhu": [25, 28], "do": [5, 7], "ph": [6.5, 8]}
 }
+
 def save_to_firebase(data):
     """Simpan data ke Firebase Realtime Database"""
     try:
@@ -86,8 +87,23 @@ def classify_fish(suhu, do, ph):
     if model and (0 <= suhu <= 33) and (0 <= do <= 9) and (5 <= ph <= 9):
         try:
             pred = model.predict([[do, suhu, ph]])[0]
-            hasil_model.append(pred.strip().lower())  # uniform lowercase
+            # Ambil probabilitas untuk semua kelas
+            pred_proba = model.predict_proba([[do, suhu, ph]])[0]
+            classes = model.classes_
+            
+            hasil_model.append(pred.strip().lower())
             print(f"🤖 Prediksi model: {pred}")
+            
+            # Log presentase untuk semua kelas
+            print("📊 Confidence Score:")
+            for i, class_name in enumerate(classes):
+                percentage = pred_proba[i] * 100
+                print(f"   {class_name}: {percentage:.1f}%")
+            
+            # Highlight yang terpilih
+            max_idx = pred_proba.argmax()
+            print(f"🎯 Terpilih: {classes[max_idx]} ({pred_proba[max_idx]*100:.1f}%)")
+            
         except Exception as e:
             print("❌ Model error:", e)
     else:
@@ -109,26 +125,7 @@ def classify_fish(suhu, do, ph):
     # Urutkan berdasarkan skor tertinggi dulu
     hasil_rule_dengan_skor.sort(key=lambda x: x["skor"], reverse=True)
     
-    # Gabungkan hasil model dengan rule (prioritas model dulu, lalu rule berdasarkan skor)
-    hasil_final = []
-    
-    # Tambahkan hasil model dulu
-    for model_fish in hasil_model:
-        if model_fish not in [fish["nama"] for fish in hasil_rule_dengan_skor]:
-            hasil_final.append(f"{model_fish.capitalize()} (Model)")
-    
-    # Tambahkan hasil rule berdasarkan skor
-    for rule_fish in hasil_rule_dengan_skor:
-        nama = rule_fish["nama"].capitalize()
-        skor = rule_fish["skor"]
-        
-        # Cek apakah juga ada di hasil model
-        if rule_fish["nama"] in hasil_model:
-            hasil_final.append(f"{nama} (Model + Rule {skor}/3)")
-        else:
-            hasil_final.append(f"{nama} (Rule {skor}/3)")
-    
-    return hasil_final
+    return [fish["nama"].capitalize() for fish in hasil_rule_dengan_skor]
 
 
 @app.route("/")
@@ -161,7 +158,7 @@ def update_data(suhu, do, ph):
         "suhu": suhu,
         "do": do,
         "ph": ph,
-        "waktu": datetime.now().isoformat(),
+        "waktu": datetime.now().strftime("%Y-%m-%d"),
         "prediksi": prediksi
     })
 
@@ -173,7 +170,7 @@ def update_data(suhu, do, ph):
             "do": do,
             "ph": ph,
             "prediksi": prediksi,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().strftime("%Y-%m-%d")
         })
     except Exception as firebase_error:
         print("⚠️ Gagal menyimpan ke Firebase:", firebase_error)
