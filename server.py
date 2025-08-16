@@ -83,8 +83,13 @@ def classify_fish(suhu, do, ph):
     hasil_model = []
     hasil_rule_dengan_skor = []
 
+    # Validasi input dulu - return kosong kalau diluar threshold
+    if not ((0 <= suhu <= 33) and (0 <= do <= 9) and (5 <= ph <= 9)):
+        print("❌ Input diluar threshold yang wajar")
+        return []
+
     # Prediksi dari model
-    if model and (0 <= suhu <= 33) and (0 <= do <= 9) and (5 <= ph <= 9):
+    if model:
         try:
             pred = model.predict([[do, suhu, ph]])[0]
             # Ambil probabilitas untuk semua kelas
@@ -106,8 +111,6 @@ def classify_fish(suhu, do, ph):
             
         except Exception as e:
             print("❌ Model error:", e)
-    else:
-        print("Input tidak wajar")
 
     # Rule-based dengan skor
     for ikan, batas in rules.items():
