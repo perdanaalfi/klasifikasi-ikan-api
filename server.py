@@ -128,7 +128,19 @@ def classify_fish(suhu, do, ph):
     # Urutkan berdasarkan skor tertinggi dulu
     hasil_rule_dengan_skor.sort(key=lambda x: x["skor"], reverse=True)
     
-    return [fish["nama"].capitalize() for fish in hasil_rule_dengan_skor]
+    # Gabungkan hasil rules + model (tanpa duplikat)
+    hasil_final = []
+    
+    # Tambah hasil rules dulu (berdasarkan skor)
+    for fish in hasil_rule_dengan_skor:
+        hasil_final.append(fish["nama"].capitalize())
+    
+    # Tambah hasil model yang belum ada di rules
+    for model_fish in hasil_model:
+        if model_fish not in [fish["nama"] for fish in hasil_rule_dengan_skor]:
+            hasil_final.append(model_fish.capitalize())
+    
+    return hasil_final
 
 
 @app.route("/")
